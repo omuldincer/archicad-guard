@@ -54,7 +54,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 | 1.2 | Command map (read vs change) + backup method spike | ✅ Done 2026-11-25 |
 | 1.3 | The guard: ask on every change | ✅ Done 2026-11-25 |
 | 1.4 | Backup before first change + change log | ✅ Done 2026-11-25 |
-| 1.5 | `/archicad-guard:log` and `:restore` commands | ⬜ |
+| 1.5 | `/archicad-log` and `/archicad-restore` commands | ✅ Done 2026-11-25 |
 | 1.6 | Test in real Archicad on a scratch project, README, v0.1.0 | ⬜ |
 
 ## Points
@@ -108,13 +108,22 @@ What changed:
 - Tests: `tests/record.test.ts` (7) and 14 new in `tests/hook.test.ts` with a fake disk (`fs.*`), fake copy (`process.run`) and fixed `clock.now`. Found: the engine hands `fs` paths to hooks with backslashes on Windows. 45 pass.
 - Known gaps: two changes at once could both back up or interleave log writes; a log over 4 MiB can't be read (`$.fs.read` limit) and then fails to write (Claude is told). Not tested live (1.6).
 
-### 1.5 Commands
+### 1.5 Commands ✅ Done 2026-11-25
 Note from 1.4: read the log from `<folder of the .pln>/archicad-guard/changes.jsonl` (`kind: 'change' | 'backup'`, types in `hooks/lib/record.ts`); `placeOf(projectInfoOf(...))` gives the paths, `project_get_project_info` needs a port (`discovery_list_active_archicads`). Backups are `archicad-guard/backups/*.pln`; this session's are in `$.state` `backups`.
 `/archicad-guard:log` shows recent changes in plain words. `/archicad-guard:restore` lists backups and gives exact steps to open one (no automatic restore into the live project).
-What changed: _(to fill)_
+What changed:
+- Branch `point-1.5-commands` (from `point-1.4-backup-log`). plugin.json 0.0.5. No questions for Sebastian.
+- Names: `/archicad-log` and `/archicad-restore`, not `/archicad-guard:log`: a command a mod registers may only hold letters, digits, `_`, `-`. Registered at `session.start` with literal names (validate: "answers its own command"), `immediate` (they only read, so they run mid-turn too).
+- `hooks/lib/history.ts` (no `$`): `argsOf` (nothing, a number, or a full `.pln` path, quotes dropped; anything else → usage), `portsOf` (`active[].port` of `discovery_list_active_archicads`, never `unavailable`), `entriesOf` (bad lines counted, not shown), `logText`, `timeOfName`/`sortBackups` (newest first by the time in the name), `restoreText`, `projectPathOfSession` (gets the path's spelling back from the backup path: the state key is lower case).
+- Which project: a `.pln` path given → that one (no Archicad needed). Else every running Archicad (`discovery_list_active_archicads`, then `project_get_project_info` per port, 3 s each, so ≤ 6 s of the hook's budget), plus the projects this session backed up (`$.state` `backups`). Untitled/Teamwork are a note under the answer. None at all → says so and shows `/archicad-log D:\path	o\project.pln`.
+- `/archicad-log [count]`: last 20 (max 200) entries, oldest first, as the CHANGELOG.md lines (`mdLineOf`), how many did not fully go through, unreadable lines, where CHANGELOG.md and changes.jsonl are. A log over 1 MiB: only its end is read (`$.fs.read` offset), so the 4 MiB limit from 1.4 no longer blocks reading.
+- `/archicad-restore [number]`: the `.pln` files in `backups/`, newest first (15 shown), size, "made this session"; steps for backup 1 (or the number): optional copy of today's .pln to `<project>_before-restore.pln`, File > Open the backup, at once File > Save As over `<project>.pln` in the project folder (Replace), and don't let Claude change the backup file itself. Nothing is restored, saved, copied or written by the mod.
+- Tests: `tests/history.test.ts` (6) and `tests/commands.test.ts` (9, through the engine: fake Archicad and disk, checks nothing is written, run or changed). 60 pass.
+- Known gaps: the restore steps' Archicad menu names are from memory (check in 1.6); the output text goes to Claude as well as to Sebastian.
 
 ### 1.6 Real test + release
 Note from 1.3: confirm live: `$.mcp.call` reaches Tapir by the name `plugin:archicad-tapir:ArchicadTapir`; the field names of `project_get_project_info` (`projectName`, `projectPath`/`projectLocation`, `isUntitled`, `isTeamwork`) show in the question; a delete's dry-run text reads well (cut at 600 chars); a slow Archicad still gets the question out.
+Note from 1.5: confirm live: `discovery_list_active_archicads` answers `{ active: [{ port }] }` (`portsOf`); `/archicad-log` and `/archicad-restore` show in the menu and answer on the scratch project; the restore steps' menu names (File > Open > Open…, File > Save As…, Replace) match Archicad, and a Save As over the original works with the backup open. README: the commands are `/archicad-log` and `/archicad-restore`.
 Note from 1.4: confirm live: `project_save_project` with `params: {}` answers in a shape `savedOf` reads (success, or a running job with a handle field it knows: `jobHandle`/`job_handle`/`handle`/`jobId`); `powershell.exe` copies the .pln while Archicad has it open; the backup and CHANGELOG.md appear beside the .pln and sync in Synology; the change result shape gives the right status in the log.
 Note from 1.2: also confirm live on the scratch copy that a plain `project_save_project` keeps the same file open and that the .pln can be copied while Archicad has it open.
 In Archicad on a scratch project: a read passes, a wall move asks, a "no" blocks, a delete shows its preview, the backup appears, the log is right. README (install, what it does, known gaps). Tag v0.1.0.

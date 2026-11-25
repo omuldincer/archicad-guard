@@ -1,6 +1,7 @@
 // archicad-guard: asks before Claude changes the Archicad model (1.3), backs the project up before the first change of
 // the session and logs every change it let through (1.4). The deciding and wording are in lib/guard.ts, the places and
-// log lines in lib/record.ts; this file asks Archicad, the person and the disk. Everything that needs `$` is a
+// log lines in lib/record.ts; this file asks Archicad, the person and the disk. The slash commands /archicad-log and
+// /archicad-restore (1.5) only read: their wording is in lib/history.ts. Everything that needs `$` is a
 // `function` declaration (the validator refuses an arrow const for it).
 
 import type { EngineInterface, McpToolResult, Register } from 'claude-code'
@@ -8,7 +9,8 @@ import type { EngineInterface, McpToolResult, Register } from 'claude-code'
 import type { Backups } from '../types'
 import { takesDryRun } from './lib/command-kind'
 import { elementGuidsOf, gateOf, jsonOfResult, OPTIONS, GO, HEADER, previewText, projectInfoOf, questionOf, stoppedText, stopReason, TAPIR_CALL, TAPIR_SERVER, type Facts, type Preview, type ProjectInfo, type TapirCall } from './lib/guard'
-import { backupEntryOf, backupNameOf, changeEntryOf, copyArgv, jsonlLineOf, join, MD_HEADER, mdLineOf, outcomeOf, placeOf, projectKeyOf, savedOf, type Entry, type Place } from './lib/record'
+import { argsOf, entriesOf, foundOfPath, LOG_COMMAND, LOG_DEFAULT, LOG_MAX, logText, nothingFoundText, portsOf, projectPathOfSession, RESTORE_COMMAND, restoreText, sortBackups, TAIL_BYTES, timeOfName, type BackupFile, type Found } from './lib/history'
+import { backupEntryOf, backupNameOf, changeEntryOf, copyArgv, jsonlLineOf, join, MD_HEADER, mdLineOf, outcomeOf, placeOf, projectKeyOf, savedOf, stemOf, type Entry, type Place } from './lib/record'
 
 export { TAPIR_CALL_TOOL } from './lib/guard'
 
@@ -27,13 +29,21 @@ const COPY_TIMEOUT_MS = 10 * 60_000
 
 const BACKUPS = { plugin: 'archicad-guard', key: 'backups' } as const
 
+/** How long each look-up of the slash commands may take: two rounds (find the Archicads, then their projects). */
+const COMMAND_LOOKUP_MS = 3_000
+
 /** One Tapir command through the engine's own connection, or null when it fails or takes too long. */
 async function tapir($: EngineInterface, name: string, args: Record<string, unknown>): Promise<McpToolResult | null> {
+  return mcpOf($, TAPIR_CALL, { name, arguments: args }, LOOKUP_TIMEOUT_MS)
+}
+
+/** One tool of the Tapir server, or null when it fails or takes longer than `ms`. */
+async function mcpOf($: EngineInterface, tool: string, args: Record<string, unknown>, ms: number): Promise<McpToolResult | null> {
   const stop = new AbortController()
 
   try {
-    const call = $.mcp.call(TAPIR_SERVER, TAPIR_CALL, { name, arguments: args }).catch(() => null)
-    const late = $.clock.sleep(LOOKUP_TIMEOUT_MS, { signal: stop.signal }).then(
+    const call = $.mcp.call(TAPIR_SERVER, tool, args).catch(() => null)
+    const late = $.clock.sleep(ms, { signal: stop.signal }).then(
       () => null,
       () => null,
     )
@@ -225,7 +235,133 @@ async function logChange($: EngineInterface, approved: Approved, result: Paramet
   }
 }
 
+/**
+ * The projects a slash command shows: the .pln the person named, else the project open in each running Archicad, plus
+ * those this session backed up. `notes` say why an open project was left out (untitled, Teamwork …).
+ */
+async function projectsOf($: EngineInterface, path: string | null): Promise<{ found: Found[]; notes: string[] }> {
+  if (path !== null) {
+    const named = foundOfPath(path, 'path')
+
+    return named === null ? { found: [], notes: [`${path} is not a full path to a .pln`] } : { found: [named], notes: [] }
+  }
+
+  const found: Found[] = []
+  const notes: string[] = []
+  const seen = new Set<string>()
+  const add = (one: Found): void => {
+    const key = projectKeyOf(one.place.projectPath)
+
+    if (!seen.has(key)) {
+      seen.add(key)
+      found.push(one)
+    }
+  }
+  const listed = await mcpOf($, 'discovery_list_active_archicads', {}, COMMAND_LOOKUP_MS)
+  const ports = listed === null || listed.isError ? [] : portsOf(jsonOfResult(listed))
+  const infos = await Promise.all(ports.map(port => mcpOf($, TAPIR_CALL, { name: 'project_get_project_info', arguments: { port } }, COMMAND_LOOKUP_MS)))
+
+  ports.forEach((port, i) => {
+    const result = infos[i] ?? null
+    const where = placeOf(result === null || result.isError ? null : projectInfoOf(jsonOfResult(result)))
+
+    if (where.kind === 'ok') add({ label: `${stemOf(where.place.projectPath)} (${where.place.projectPath})`, place: where.place, source: 'archicad' })
+    else notes.push(`Archicad on port ${port}: ${where.why}`)
+  })
+
+  for (const [key, file] of Object.entries(await backupsOf($))) {
+    const one = foundOfPath(projectPathOfSession(key, file), 'session')
+
+    if (one !== null) add(one)
+  }
+
+  return { found, notes }
+}
+
+/** The end of a project's changes.jsonl as entries; `missing` when there is none. Throws when the disk refuses. */
+async function readLog($: EngineInterface, place: Place): Promise<Parameters<typeof logText>[1]> {
+  if (!(await $.fs.exists(place.jsonl))) return { missing: true }
+
+  const { size } = await $.fs.stat(place.jsonl)
+  const isTail = size > TAIL_BYTES
+  const text = isTail ? await $.fs.read(place.jsonl, { offset: size - TAIL_BYTES, length: TAIL_BYTES }) : await $.fs.read(place.jsonl)
+
+  return { ...entriesOf(text, isTail), isTail }
+}
+
+/** The .pln files in a project's backup folder, newest first; `missing` when there is no folder. */
+async function listBackups($: EngineInterface, place: Place): Promise<BackupFile[] | { missing: true }> {
+  if (!(await $.fs.exists(place.backups))) return { missing: true }
+
+  const files = (await $.fs.list(place.backups)).filter(f => f.kind === 'file' && /\.pln$/i.test(f.name))
+
+  return sortBackups(files.map(f => ({ name: f.name, path: join(place.backups, f.name), bytes: f.size, ms: timeOfName(f.name) })))
+}
+
+const errorText = (error: unknown): string => (error instanceof Error ? error.message : String(error))
+
+const usageOf = (command: string, what: string): string => `Usage: /${command} [${what} | D:\\path\\to\\project.pln]`
+
+/** The notes about left-out projects, under the answer. */
+const withNotes = (parts: string[], notes: readonly string[]): string => [...parts, ...(notes.length > 0 ? [notes.map(n => `(${n})`).join('\n')] : [])].join('\n\n')
+
 export const register: Register = on => {
+  on('session.start', async ($, e, next) => {
+    // Literal names, so the validator knows these hooks answer their own commands. A command that can't be registered
+    // is missing from the menu; the guard itself still runs.
+    await $.command.register({ name: 'archicad-log', description: 'archicad-guard: the recent changes Claude made in Archicad', argumentHint: '[count | project.pln]', immediate: true }).catch(() => null)
+    await $.command.register({ name: 'archicad-restore', description: 'archicad-guard: list the backups and the steps to open one', argumentHint: '[number | project.pln]', immediate: true }).catch(() => null)
+
+    return next(e)
+  })
+
+  on('command.run', { command: 'archicad-log' }, async ($, e) => {
+    const args = argsOf(e.args)
+
+    if (args.kind === 'bad') return { text: usageOf(LOG_COMMAND, 'count') }
+
+    const count = args.kind === 'number' ? Math.min(args.n, LOG_MAX) : LOG_DEFAULT
+    const { found, notes } = await projectsOf($, args.kind === 'path' ? args.path : null)
+
+    if (found.length === 0) return { text: nothingFoundText(LOG_COMMAND, notes) }
+
+    const parts: string[] = []
+
+    for (const one of found) {
+      try {
+        parts.push(logText(one, await readLog($, one.place), count))
+      } catch (error) {
+        parts.push(`Archicad changes for ${one.label}: the log could not be read (${errorText(error)}). Open ${one.place.md} instead.`)
+      }
+    }
+
+    return { text: withNotes(parts, notes) }
+  }).catch(() => ({ text: 'archicad-guard could not show the log. Open CHANGELOG.md in the archicad-guard folder beside the .pln.' }))
+
+  on('command.run', { command: 'archicad-restore' }, async ($, e) => {
+    const args = argsOf(e.args)
+
+    if (args.kind === 'bad') return { text: usageOf(RESTORE_COMMAND, 'number') }
+
+    const pick = args.kind === 'number' ? args.n : 1
+    const { found, notes } = await projectsOf($, args.kind === 'path' ? args.path : null)
+
+    if (found.length === 0) return { text: nothingFoundText(RESTORE_COMMAND, notes) }
+
+    const made = await backupsOf($)
+    const parts: string[] = []
+
+    for (const one of found) {
+      try {
+        parts.push(restoreText(one, await listBackups($, one.place), pick, made[projectKeyOf(one.place.projectPath)] ?? null))
+      } catch (error) {
+        parts.push(`Backups of ${one.label}: the folder could not be read (${errorText(error)}). Look in ${one.place.backups}.`)
+      }
+    }
+
+    return { text: withNotes(parts, notes) }
+  }).catch(() => ({ text: 'archicad-guard could not list the backups. Look in the archicad-guard\\backups folder beside the .pln.' }))
+
   on('tool.call', async ($, e, next) => {
     const decision = await decide($, e as unknown as Record<string, unknown>)
 
