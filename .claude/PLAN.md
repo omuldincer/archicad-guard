@@ -47,7 +47,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 
 | Point | What | Status |
 |---|---|---|
-| 1.1 | Repo, marketplace, plugin skeleton | ⬜ |
+| 1.1 | Repo, marketplace, plugin skeleton | ✅ Done 2026-11-25 |
 | 1.2 | Command map (read vs change) + backup method spike | ⬜ |
 | 1.3 | The guard: ask on every change | ⬜ |
 | 1.4 | Backup before first change + change log | ⬜ |
@@ -56,11 +56,18 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 
 ## Points
 
-### 1.1 Repo, marketplace, plugin skeleton
+### 1.1 Repo, marketplace, plugin skeleton ✅ Done 2026-11-25
 `git init` in arch-mods, `.claude-plugin/marketplace.json`, `archicad-guard/` with plugin.json (0.0.1), hooks.json, an empty `register.ts`, types, one skeleton test. Exclude `.vscode/` in `.git/info/exclude`. Ask Sebastian to create the GitHub repo (private) on github.com and add the remote. Add the marketplace and install it; confirm `claude plugin list` shows it enabled.
-What changed: _(to fill)_
+What changed:
+- `git init` (main = PLAN.md only), work on branch `point-1.1-skeleton`. `.vscode/` in `.git/info/exclude`; `.gitignore` drops `node_modules/`, `*.log`, `*/.claude-plugin/types/` (engine-written types).
+- `.claude-plugin/marketplace.json` (`arch-mods`, one plugin). `archicad-guard/`: plugin.json 0.0.1 (author, `types`), `hooks/hooks.json` → `./register.ts`, `register.ts` exports `TAPIR_CALL_TOOL` and an empty `register`, `types/index.d.ts` (empty `PluginState['archicad-guard']`), `tests/skeleton.test.ts`.
+- `scripts/check.sh` (validate + test + tsc in one) and `scripts/typecheck.sh` (tsc 5.6.3, tsconfig outside the plugin), adapted from gg-mods. Run `scripts/check.sh` in Git Bash; set `CC_TYPES` if types are not found.
+- Marketplace added (user settings) and plugin installed, user scope, read in place from the repo: `claude plugin list` shows `archicad-guard@arch-mods` 0.0.1 enabled.
+- Tests run with `claude plugin test` (bun runner), not vitest: no worker limit needed.
+- Not done in 1.1: GitHub remote and push wait on Sebastian creating the private repo. README/LICENSE come in 1.6 (validator's directory-only warnings).
 
 ### 1.2 Command map + backup spike
+Note from 1.1: put the command map in `archicad-guard/hooks/lib/` (a mod cannot import outside its folder); `TAPIR_CALL_TOOL` is already in `register.ts`. Check with `scripts/check.sh`.
 Pull the full Tapir command list (`archicad_list_commands`, all groups) and sort every command into **read** or **change**, saved as a data file in the plugin with a test that unknown names count as change. Name rule first (`get_`, `list_`, `find_`, `search_` … = read), then hand-check the rest. Note commands with `dryRun` (e.g. `elements_delete_elements`) so 1.3 can show a preview.
 Spike on a scratch project: does `project_save_project` with a path switch the open file to the copy (like Save As)? If yes, find another way (save in place then copy the file on disk, or `project_save_as_module_file` of the touched elements). Write the chosen method in Decisions.
 What changed: _(to fill)_

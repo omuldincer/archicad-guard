@@ -1,0 +1,14 @@
+{
+  "name": "arch-mods",
+  "owner": { "name": "Sebastian" },
+  "metadata": {
+    "description": "Mods for architecture work: guards for the Archicad model."
+  },
+  "plugins": [
+    {
+      "name": "archicad-guard",
+      "source": "./archicad-guard",
+      "description": "Asks before Claude changes the Archicad model, backs it up and logs every change."
+    }
+  ]
+}
