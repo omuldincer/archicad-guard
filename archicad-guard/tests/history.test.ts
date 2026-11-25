@@ -20,6 +20,10 @@ test('takes the active ports only', () => {
   expect(portsOf({ active: [{ port: 19723, version: '28' }, { port: 19724 }], unavailable: [{ port: 19725 }] })).toEqual([19723, 19724])
   expect(portsOf({ result: { active: [{ port: 19723 }] } })).toEqual([19723])
   expect(portsOf({ unavailable: [{ port: 19725 }] })).toEqual([])
+  // the live shape (1.6)
+  expect(portsOf({ activeInstances: [{ port: 19723 }], unavailableInstances: [{ reason: 'unresponsive', port: 19724 }] })).toEqual([19723])
+  expect(portsOf({ activeInstances: [], unavailableInstances: [{ reason: 'missing_tapir', message: 'x' }] })).toEqual([])
+  expect(portsOf({ unavailableInstances: [{ port: 19724 }] })).toEqual([])
   expect(portsOf(null)).toEqual([])
 })
 

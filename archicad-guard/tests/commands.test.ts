@@ -32,7 +32,7 @@ const change = (time: string, over: Partial<ChangeEntry> = {}): ChangeEntry => (
 const backup: BackupEntry = { kind: 'backup', time: '2026-11-25T12:03:09.000Z', project: PLN, backup: `${BACKUPS}/${NEWER}`, bytes: 52_428_800, who: 'by archicad-guard, before the first change of the session' }
 
 function world(on: On, over: Partial<World> = {}): { w: World; seen: Seen } {
-  const w: World = { archicads: { active: [{ port: PORT }], unavailable: [] }, project: { isUntitled: false, isTeamwork: false, projectName: 'scratch', projectPath: PLN }, made: {}, ...over }
+  const w: World = { archicads: { activeInstances: [{ port: PORT }], unavailableInstances: [] }, project: { isUntitled: false, isTeamwork: false, projectName: 'scratch', projectPath: PLN }, made: {}, ...over }
   const seen: Seen = { looked: [], writes: [], runs: 0, registered: [], reads: [], disk: new Map(), sizes: new Map() }
 
   on('session.start', (_, e) => ({ cwd: e.cwd }))

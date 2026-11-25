@@ -41,8 +41,9 @@ export function argsOf(raw: string): Args {
 }
 
 /**
- * The ports of the running Archicads from `discovery_list_active_archicads` (`{ active: [{ port }], unavailable }`).
- * Without an `active` list, every `port` anywhere except under `unavailable`.
+ * The ports of the running Archicads from `discovery_list_active_archicads`.
+ * Live answer (1.6): `{ activeInstances: [{ port }], unavailableInstances: [{ reason, message }] }`; `active` is read too.
+ * Without an active list, every `port` anywhere except under an `unavailable…` key.
  */
 export function portsOf(json: unknown): number[] {
   const found = new Set<number>()
@@ -58,12 +59,14 @@ export function portsOf(json: unknown): number[] {
     if (isPort(value['port'])) found.add(value['port'])
 
     for (const [key, inner] of Object.entries(value)) {
-      if (key !== 'unavailable' && key !== 'port') walk(inner, depth + 1)
+      if (!key.startsWith('unavailable') && key !== 'port') walk(inner, depth + 1)
     }
   }
   const body = isRecord(json) && isRecord(json['result']) ? json['result'] : json
 
-  walk(isRecord(body) && Array.isArray(body['active']) ? body['active'] : body, 0)
+  const listed = isRecord(body) ? [body['activeInstances'], body['active']].find(Array.isArray) : undefined
+
+  walk(listed ?? body, 0)
 
   return [...found]
 }
