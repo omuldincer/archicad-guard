@@ -64,6 +64,7 @@ Then `/reload-plugins`. After a version bump: `claude plugin update archicad-gua
 - Element counts only count `elementId.guid` values in the call. Commands that pick elements another way (for example "all walls on a story") show no count.
 - The output of `/archicad-log` and `/archicad-restore` goes to Claude as well as to you.
 - A session started by another Claude session (a side session) may not run the mod. Seen 2026-11-25: a change went through there without asking. Make Archicad changes in a normal Code tab session.
+- The restore steps' menu names (File > Open > Open…, File > Save As…, Replace) are not yet checked in Archicad 30.
 - Only the Tapir MCP tools are guarded. Anything that changes the `.pln` some other way (a script, another add-on, you in Archicad) isn't seen.
 
 ## Tested live
