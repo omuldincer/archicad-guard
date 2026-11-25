@@ -51,7 +51,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 |---|---|---|
 | 1.1 | Repo, marketplace, plugin skeleton | ✅ Done 2026-11-25 |
 | 1.2 | Command map (read vs change) + backup method spike | ✅ Done 2026-11-25 |
-| 1.3 | The guard: ask on every change | ⬜ |
+| 1.3 | The guard: ask on every change | ✅ Done 2026-11-25 |
 | 1.4 | Backup before first change + change log | ⬜ |
 | 1.5 | `/archicad-guard:log` and `:restore` commands | ⬜ |
 | 1.6 | Test in real Archicad on a scratch project, README, v0.1.0 | ⬜ |
@@ -80,12 +80,21 @@ What changed:
 - Spike: Archicad wasn't running, so not tested live. Answered from the Tapir schemas instead (see Decisions). New Tapir commands: refresh the txt, rerun the script, read the diff.
 - `register.ts` unchanged: the map isn't hooked up yet (1.3).
 
-### 1.3 The guard
+### 1.3 The guard ✅ Done 2026-11-25
 Note from 1.2: `kindOf` / `takesDryRun` in `hooks/lib/command-kind.ts`. `view` passes like read and is not logged. For the dry-run preview call Tapir again with `params.dryRun: true` only if the mod can (it has no MCP access of its own); otherwise tell Claude to run the dry run first and show it. The Tapir call tool takes `{ name, arguments: { port, params } }`; check the `tool.call` event shape in the types for where that input sits.
 PreToolUse hook on the Tapir call tool: read → allow; change → ask, with a plain question: command, project name, how many elements, and for deletes the dry-run result. Saying no blocks the call and tells Claude why. Unclear → ask. Tests for each path.
-What changed: _(to fill)_
+What changed:
+- Branch `point-1.3-guard`. plugin.json 0.0.3. No questions for Sebastian: the plan already settled them.
+- `hooks/lib/guard.ts` (no `$`): `gateOf(e)` → pass or ask; reads `{ tool, name, arguments: { port, params } }` straight off the `tool.call` event (MCP arguments sit at the top of `e`; `arguments` as a JSON string is read too). Element count = distinct `elementId.guid` anywhere in `params`. Question wording, preview cut (600 chars), deny text. `TAPIR_CALL_TOOL` moved here, still re-exported from `register.ts`.
+- `hooks/register.ts`: one `tool.call` hook. read/view → pass. change → asks `Stop` / `Go ahead` (Stop first), header `Archicad`, every time (no "allow for session": Decisions say ask on every change). Question lines: command, project (name + path, Teamwork / untitled noted), port, element count, dry-run result. Anything but `Go ahead` (Stop, dismissed, free text, no one to ask) denies with `archicad-guard stopped this: <why>. Nothing was changed in Archicad. Ask the user before trying again.`
+- The mod CAN call Tapir itself: `$.mcp.call('plugin:archicad-tapir:ArchicadTapir', 'archicad_call_tool', { name, arguments })`. Used for `project_get_project_info` (port from the call) and, for `takesDryRun` commands, the same call with `params.dryRun: true`. 4 s timeout, then the question goes out without that line ("could not be read" / "Dry run could not be shown: …"). The timeout sleep is cancelled once Archicad answers: `$.clock.sleep` is the one `$` call that counts against the hook's 10 s budget.
+- My calls: a dry run Claude sends itself (`params.dryRun === true` on a `takesDryRun` command) passes without asking (Tapir: changes nothing, no undo step); `dryRun` on any other command still asks. Any other tool of the two Archicad servers not in the Decisions read list asks (generic question). Unclear call (no name, unreadable arguments, guard error) → asks; a guard that throws or overruns its budget → `.catch` denies Archicad calls (validate: "gating hook with .catch").
+- Tests: `tests/guard.test.ts` (gate, guid count, project text, preview) and `tests/hook.test.ts` through the engine with a fake Tapir on `mcp.call` and a recording bottom `tool.call`: read, view, change+Stop, Go ahead, asks again each time, delete dry run (sent with `dryRun: true`, shown), failed dry run, Archicad down, Archicad slow (timeout), Claude's own dry run, unknown/missing/unreadable, JSON-string args, no one to ask / odd answer, other Archicad tools. 24 pass. Tests hold `clock.sleep` (the test clock resolves it at once).
+- Not tested live: Archicad not used in this point (1.6).
+
 
 ### 1.4 Backup + change log
+Note from 1.3: hook it into `decide` in `register.ts`: back up right after a `Go ahead`, before `next(e)`; log after `await next(e)` in the same hook (no separate PostToolUse needed). `projectOf` already returns `isUntitled` / `isTeamwork` / path from `project_get_project_info`, and `tapir()` calls any Tapir command (4 s timeout; `project_save_project` may need longer). `elementGuidsOf(params)` gives the guids for the log. Keep `.catch` fail-closed. Dry runs pass unlogged.
 Note from 1.2: method is save in place, then copy the .pln (Decisions). Find the project's path first (check `project_get_project_info` / `teamwork_get_teamwork_project_info` schemas); Teamwork, read-only or untitled → no backup → block the change and say why. Never pass a path to `project_save_project`.
 Before the first approved change in a session, take a backup by the 1.2 method into a backup folder next to the project (location and how many to keep: ask Sebastian). PostToolUse writes one line per change to a log (JSON lines) plus a readable `CHANGELOG.md`: time, command, element guids, result, "by Claude, approved by Sebastian". Failed calls logged as failed.
 What changed: _(to fill)_
@@ -95,6 +104,7 @@ What changed: _(to fill)_
 What changed: _(to fill)_
 
 ### 1.6 Real test + release
+Note from 1.3: confirm live: `$.mcp.call` reaches Tapir by the name `plugin:archicad-tapir:ArchicadTapir`; the field names of `project_get_project_info` (`projectName`, `projectPath`/`projectLocation`, `isUntitled`, `isTeamwork`) show in the question; a delete's dry-run text reads well (cut at 600 chars); a slow Archicad still gets the question out.
 Note from 1.2: also confirm live on the scratch copy that a plain `project_save_project` keeps the same file open and that the .pln can be copied while Archicad has it open.
 In Archicad on a scratch project: a read passes, a wall move asks, a "no" blocks, a delete shows its preview, the backup appears, the log is right. README (install, what it does, known gaps). Tag v0.1.0.
 What changed: _(to fill)_
