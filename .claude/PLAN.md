@@ -55,7 +55,8 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 | 1.3 | The guard: ask on every change | ✅ Done 2026-11-25 |
 | 1.4 | Backup before first change + change log | ✅ Done 2026-11-25 |
 | 1.5 | `/archicad-log` and `/archicad-restore` commands | ✅ Done 2026-11-25 |
-| 1.6 | Test in real Archicad on a scratch project, README, v0.1.0 | ⬜ |
+| 1.6a | Live check of reads and the guard (headless), README | ✅ Done 2026-11-25 |
+| 1.6b | Live Go ahead test in a normal session, v0.1.0 | ⬜ |
 
 ## Points
 
@@ -121,17 +122,24 @@ What changed:
 - Tests: `tests/history.test.ts` (6) and `tests/commands.test.ts` (9, through the engine: fake Archicad and disk, checks nothing is written, run or changed). 60 pass.
 - Known gaps: the restore steps' Archicad menu names are from memory (check in 1.6); the output text goes to Claude as well as to Sebastian.
 
-### 1.6 Real test + release
+### 1.6a Real test, part 1 ✅ Done 2026-11-25
+Split 2026-11-25: the side session that ran 1.6 doesn't run the mod, so the Go ahead test moved to 1.6b (Sebastian's choice).
 Note from 1.3: confirm live: `$.mcp.call` reaches Tapir by the name `plugin:archicad-tapir:ArchicadTapir`; the field names of `project_get_project_info` (`projectName`, `projectPath`/`projectLocation`, `isUntitled`, `isTeamwork`) show in the question; a delete's dry-run text reads well (cut at 600 chars); a slow Archicad still gets the question out.
 Note from 1.5: confirm live: `discovery_list_active_archicads` answers `{ active: [{ port }] }` (`portsOf`); `/archicad-log` and `/archicad-restore` show in the menu and answer on the scratch project; the restore steps' menu names (File > Open > Open…, File > Save As…, Replace) match Archicad, and a Save As over the original works with the backup open. README: the commands are `/archicad-log` and `/archicad-restore`.
 Note from 1.4: confirm live: `project_save_project` with `params: {}` answers in a shape `savedOf` reads (success, or a running job with a handle field it knows: `jobHandle`/`job_handle`/`handle`/`jobId`); `powershell.exe` copies the .pln while Archicad has it open; the backup and CHANGELOG.md appear beside the .pln and sync in Synology; the change result shape gives the right status in the log.
 Note from 1.2: also confirm live on the scratch copy that a plain `project_save_project` keeps the same file open and that the .pln can be copied while Archicad has it open.
 In Archicad on a scratch project: a read passes, a wall move asks, a "no" blocks, a delete shows its preview, the backup appears, the log is right. README (install, what it does, known gaps). Tag v0.1.0.
-What changed (part 1, 2026-11-25, branch `point-1.6-release` from `point-1.5-commands`):
+What changed (branch `point-1.6-release` from `point-1.5-commands`):
 - Scratch project: `C:\Users\Sebastian Axente\Desktop\ROtemplate29\Kreg-template_v0.6_BACKUP.pln` (Save As copy of the Kreg template, port 19723, Archicad 30, Tapir 2.0.1). Almost empty: no walls, one editable element (`5786CE14-EB6F-4AD1-9378-884D0D080A9F`).
 - Found live: `discovery_list_active_archicads` answers `{ activeInstances: [{ port, projectName, projectPath, … }], unavailableInstances: [{ reason, message }] }`, not `active`/`unavailable`. `portsOf` read none of it: fixed (reads `activeInstances`, then `active`; skips every `unavailable…` key), tests added.
 - Confirmed live: `project_get_project_info` fields are `projectName`, `projectPath`, `projectLocation`, `isUntitled`, `isTeamwork` (as `projectInfoOf` reads). It refuses `params: {}` (the mod sends none there: right). `project_save_project` requires `params` (the backup's `params: {}` is right).
 - Confirmed live (headless `claude -p`, debug log): the mod loads (tier user, admitted, both commands listed); a change is caught, `$.mcp.call` reaches Tapir by `plugin:archicad-tapir:ArchicadTapir` (1.1 s), and with no one to ask it is denied with the stop text. Nothing moved.
 - Found: the session started from another session (side session) does **not** run the mod: a move there went through unasked (the scratch element moved +1 m in x, not moved back). The live Go ahead test needs a normal Code tab session.
 - README: `archicad-guard/README.md` (install, kinds, question, backups and log, commands, restore steps, known gaps).
-- Still to do live, in a normal session: Go ahead → save + copy backup, `changes.jsonl` / `CHANGELOG.md` beside the .pln; Stop blocks; a delete's dry-run preview; `/archicad-log`, `/archicad-restore`; the restore menu names; then plugin.json 0.1.0 and tag v0.1.0.
+- plugin.json stays 0.0.5; 1.6b bumps to 0.1.0. Tests: 60 pass (live-shape cases added inside the `portsOf` test).
+
+### 1.6b Real test, part 2 + release
+Note from 1.6a: run in a **normal** Code tab session, not one started by another session (those don't run the mod). First confirm the mod runs: `/archicad-log` must show in the menu. Scratch copy: `C:\Users\Sebastian Axente\Desktop\ROtemplate29\Kreg-template_v0.6_BACKUP.pln`; check with `discovery_list_active_archicads` that it (not the template) is open, and say the file before any write. Its one editable element `5786CE14-EB6F-4AD1-9378-884D0D080A9F` was moved +1 m in x unguarded in 1.6a: use it for the move test (move it back). No walls in it: for the delete preview draw a throwaway line or wall in the copy first. The `archicad-guard\` folder will be created in `ROtemplate29` beside the copy.
+Note from 1.6a (still open from 1.2–1.5): `project_save_project` `params: {}` answer shape (`savedOf`); PowerShell copy of the open .pln; delete dry-run text (600-char cut); log status from the move's `executionResults`; restore menu names (File > Open > Open…, File > Save As…, Replace) and a Save As over the original with the backup open.
+In Archicad, scratch copy: a change asks, Stop blocks, Go ahead backs up then runs, the log is right, a delete shows its preview, `/archicad-log` and `/archicad-restore` answer. Fix what's found, update README. plugin.json 0.1.0, `claude plugin update archicad-guard@arch-mods`, tag v0.1.0.
+What changed: _(to fill)_
