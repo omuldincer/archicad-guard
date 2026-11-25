@@ -56,7 +56,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 | 1.4 | Backup before first change + change log | ✅ Done 2026-11-25 |
 | 1.5 | `/archicad-log` and `/archicad-restore` commands | ✅ Done 2026-11-25 |
 | 1.6a | Live check of reads and the guard (headless), README | ✅ Done 2026-11-25 |
-| 1.6b | Live Go ahead test in a normal session, v0.1.0 | ⬜ |
+| 1.6b | Live Go ahead test in a normal session, v0.1.0 | 🟨 Guard tested live; 2 commands + tag wait on Sebastian |
 
 ## Points
 
@@ -142,4 +142,10 @@ What changed (branch `point-1.6-release` from `point-1.5-commands`):
 Note from 1.6a: run in a **normal** Code tab session, not one started by another session (those don't run the mod). First confirm the mod runs: `/archicad-log` must show in the menu. Scratch copy: `C:\Users\Sebastian Axente\Desktop\ROtemplate29\Kreg-template_v0.6_BACKUP.pln`; check with `discovery_list_active_archicads` that it (not the template) is open, and say the file before any write. Its one editable element `5786CE14-EB6F-4AD1-9378-884D0D080A9F` was moved +1 m in x unguarded in 1.6a: use it for the move test (move it back). No walls in it: for the delete preview draw a throwaway line or wall in the copy first. The `archicad-guard\` folder will be created in `ROtemplate29` beside the copy.
 Note from 1.6a (still open from 1.2–1.5): `project_save_project` `params: {}` answer shape (`savedOf`); PowerShell copy of the open .pln; delete dry-run text (600-char cut); log status from the move's `executionResults`; restore menu names (File > Open > Open…, File > Save As…, Replace) and a Save As over the original with the backup open.
 In Archicad, scratch copy: a change asks, Stop blocks, Go ahead backs up then runs, the log is right, a delete shows its preview, `/archicad-log` and `/archicad-restore` answer. Fix what's found, update README. plugin.json 0.1.0, `claude plugin update archicad-guard@arch-mods`, tag v0.1.0.
-What changed: _(to fill)_
+What changed (branch `point-1.6-release`, normal Code tab session, scratch copy above, port 19723):
+- Mod runs in a normal session (0.0.5 enabled; the first change asked).
+- Confirmed live: a read (`project_get_project_info`) passes unasked. Move of `5786CE14…` −1 m x (back where it was): Stop → denied with the stop text, nothing moved; again, Go ahead → `project_save_project` `params: {}` answered in a shape `savedOf` reads, PowerShell copied the open .pln (44.3 MB, sizes equal, under a second), the move ran, `executionResults: [{success:true}]` → `done`. `ROtemplate29\archicad-guard\` holds `backups\Kreg-template_v0.6_BACKUP_2026-11-25_142627.pln`, `changes.jsonl` (backup + change), `CHANGELOG.md`. A second change (throwaway wall) made no second backup. Delete of that wall: the question showed the dry-run result (Sebastian: reads fine); Stop → not logged.
+- Found and fixed: a created element was logged as "no elements named" (its guid is only in Archicad's answer). `answerJsonOf` in `record.ts`; the log takes the call's guids plus those in the answer of a change that ran (not of a failed one). 2 tests; 62 pass.
+- Left in the scratch copy: test wall `8310AA3C-A747-4500-956E-F3634348B5EA` at (100,100)–(103,100); Sebastian deletes it by hand.
+- plugin.json 0.1.0, `claude plugin update archicad-guard@arch-mods` done (applies after restart / `/reload-plugins`). README: guids from the answer, "Tested live" section.
+- Still open, Sebastian, then ✅ and tag v0.1.0: `/archicad-log` and `/archicad-restore` show in the menu and answer on the scratch copy; the restore menu names (File > Open > Open…, File > Save As…, Replace) match Archicad 30.
