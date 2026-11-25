@@ -182,6 +182,8 @@ export type Facts = {
   call: TapirCall | null
   project: ProjectInfo | null
   preview: Preview
+  /** What the question says about the backup (1.4): one is made first, one was made this session, or nothing. */
+  backup?: { kind: 'first'; folder: string } | { kind: 'made'; file: string } | null
 }
 
 /** The question: what Claude is about to do, in plain lines, ending in a question mark. */
@@ -205,6 +207,8 @@ export function questionOf(facts: Facts): string {
 
   if (facts.preview.kind === 'shown') lines.push(`Dry run says: ${facts.preview.text}`)
   if (facts.preview.kind === 'failed') lines.push(`Dry run could not be shown: ${facts.preview.why}.`)
+  if (facts.backup?.kind === 'first') lines.push(`Before it runs: the project is saved, then copied to ${facts.backup.folder}.`)
+  if (facts.backup?.kind === 'made') lines.push(`Backup: already made this session (${facts.backup.file}).`)
 
   lines.push('Let it run?')
 

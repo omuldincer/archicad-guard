@@ -43,6 +43,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 - 2026-11-25 Strictness: ask on every change to the model; reads pass without asking; every change is logged.
 - 2026-11-25 Scope: all Archicad traffic goes through `mcp__plugin_archicad-tapir_ArchicadTapir__archicad_call_tool` (its `name` argument says which command), so that one tool is the main gate. `archicad_get_job`, `archicad_list_commands`, `archicad_get_command_schema`, `discovery_list_active_archicads` and `mcp__archicad-public__GetArchicadInstances` are reads.
 - 2026-11-25 Backup method (1.2): save the project in place (`project_save_project`, no path), then copy the .pln into the backup folder on disk. Not Save As: Tapir's docs say `project_save_project` with a path and `project_save_project_as_archive` both switch the open project to the copy. A project that can't be saved in place (Teamwork, read-only, untitled) gets no backup, so the change is blocked.
+- 2026-11-25 Backup and log place (1.4): one `archicad-guard` folder beside the .pln (so it lives in the project's Synology folder): `backups/<project>_<YYYY-MM-DD_HHMMSS>.pln`, `changes.jsonl`, `CHANGELOG.md`. Backups are never deleted by the mod.
 - 2026-11-25 Three kinds, not two: **read** (passes), **view** = screen or selection only (zoom, window, select, highlight, alerts: passes, not logged), **change** = everything else, file exports included (asks). Unknown names are change.
 
 ## Status
@@ -52,7 +53,7 @@ We are building the archicad-guard mod. Do the point above from .claude/PLAN.md,
 | 1.1 | Repo, marketplace, plugin skeleton | ✅ Done 2026-11-25 |
 | 1.2 | Command map (read vs change) + backup method spike | ✅ Done 2026-11-25 |
 | 1.3 | The guard: ask on every change | ✅ Done 2026-11-25 |
-| 1.4 | Backup before first change + change log | ⬜ |
+| 1.4 | Backup before first change + change log | ✅ Done 2026-11-25 |
 | 1.5 | `/archicad-guard:log` and `:restore` commands | ⬜ |
 | 1.6 | Test in real Archicad on a scratch project, README, v0.1.0 | ⬜ |
 
@@ -93,18 +94,28 @@ What changed:
 - Not tested live: Archicad not used in this point (1.6).
 
 
-### 1.4 Backup + change log
+### 1.4 Backup + change log ✅ Done 2026-11-25
 Note from 1.3: hook it into `decide` in `register.ts`: back up right after a `Go ahead`, before `next(e)`; log after `await next(e)` in the same hook (no separate PostToolUse needed). `projectOf` already returns `isUntitled` / `isTeamwork` / path from `project_get_project_info`, and `tapir()` calls any Tapir command (4 s timeout; `project_save_project` may need longer). `elementGuidsOf(params)` gives the guids for the log. Keep `.catch` fail-closed. Dry runs pass unlogged.
 Note from 1.2: method is save in place, then copy the .pln (Decisions). Find the project's path first (check `project_get_project_info` / `teamwork_get_teamwork_project_info` schemas); Teamwork, read-only or untitled → no backup → block the change and say why. Never pass a path to `project_save_project`.
 Before the first approved change in a session, take a backup by the 1.2 method into a backup folder next to the project (location and how many to keep: ask Sebastian). PostToolUse writes one line per change to a log (JSON lines) plus a readable `CHANGELOG.md`: time, command, element guids, result, "by Claude, approved by Sebastian". Failed calls logged as failed.
-What changed: _(to fill)_
+What changed:
+- Branch `point-1.4-backup-log` (from `point-1.3-guard`). plugin.json 0.0.4. Sebastian chose: everything beside the .pln in `archicad-guard/`, keep all backups (Decisions).
+- `hooks/lib/record.ts` (no `$`): `placeOf(project)` → folder/backups/jsonl/md or why not; path helpers keep the path's own separator; `backupNameOf` (local time, `-2` … when taken); `COPY_SCRIPT`; `savedOf` (save answer, running job), `outcomeOf` (done / failed / partly failed from `executionResults` / still running); log entries and the CHANGELOG line.
+- `register.ts` `decide`: a change first needs a place. No project (Archicad slow or down, no port, unreadable args), untitled, Teamwork or no path → stopped **without a question** (nothing to back up). Other Archicad tools that aren't the Tapir call (1.3 asked) are now stopped the same way: no project to back up or log. The question gains a line: `Before it runs: the project is saved, then copied to <backups>.` or `Backup: already made this session (<file>).`
+- After `Go ahead`, first change for that project this session: `project_save_project` with `params: {}` (no timer: `$.mcp.call` doesn't count against the budget); a `status: running` answer is polled with `archicad_get_job` up to 10 times. Then the copy: `$.process.run` PowerShell `[System.IO.File]::Copy(src, dst, $false)` with the paths in env vars (AG_SRC/AG_DIR/AG_DST), 10 min timeout; the copy's size must equal the .pln's (`$.fs.stat`). Any failure → change stopped, says why. The backup goes into `$.state` `backups` (project key → file; contract in `types/index.d.ts`) and the log gets a `backup` entry.
+- After `next(e)`: one `change` entry (ISO time, command, tool, port, project, all guids, status, detail, backup, "by Claude, approved by Sebastian") to `changes.jsonl` and a plain line to `CHANGELOG.md`. `$.fs` has no append: the file is read and written whole. A log that can't be written: the change already ran, so Claude gets it in `context` and a toast shows.
+- Reads, views and dry runs: no backup, no log. A "Stop": nothing saved, copied or written.
+- Tests: `tests/record.test.ts` (7) and 14 new in `tests/hook.test.ts` with a fake disk (`fs.*`), fake copy (`process.run`) and fixed `clock.now`. Found: the engine hands `fs` paths to hooks with backslashes on Windows. 45 pass.
+- Known gaps: two changes at once could both back up or interleave log writes; a log over 4 MiB can't be read (`$.fs.read` limit) and then fails to write (Claude is told). Not tested live (1.6).
 
 ### 1.5 Commands
+Note from 1.4: read the log from `<folder of the .pln>/archicad-guard/changes.jsonl` (`kind: 'change' | 'backup'`, types in `hooks/lib/record.ts`); `placeOf(projectInfoOf(...))` gives the paths, `project_get_project_info` needs a port (`discovery_list_active_archicads`). Backups are `archicad-guard/backups/*.pln`; this session's are in `$.state` `backups`.
 `/archicad-guard:log` shows recent changes in plain words. `/archicad-guard:restore` lists backups and gives exact steps to open one (no automatic restore into the live project).
 What changed: _(to fill)_
 
 ### 1.6 Real test + release
 Note from 1.3: confirm live: `$.mcp.call` reaches Tapir by the name `plugin:archicad-tapir:ArchicadTapir`; the field names of `project_get_project_info` (`projectName`, `projectPath`/`projectLocation`, `isUntitled`, `isTeamwork`) show in the question; a delete's dry-run text reads well (cut at 600 chars); a slow Archicad still gets the question out.
+Note from 1.4: confirm live: `project_save_project` with `params: {}` answers in a shape `savedOf` reads (success, or a running job with a handle field it knows: `jobHandle`/`job_handle`/`handle`/`jobId`); `powershell.exe` copies the .pln while Archicad has it open; the backup and CHANGELOG.md appear beside the .pln and sync in Synology; the change result shape gives the right status in the log.
 Note from 1.2: also confirm live on the scratch copy that a plain `project_save_project` keeps the same file open and that the .pln can be copied while Archicad has it open.
 In Archicad on a scratch project: a read passes, a wall move asks, a "no" blocks, a delete shows its preview, the backup appears, the log is right. README (install, what it does, known gaps). Tag v0.1.0.
 What changed: _(to fill)_

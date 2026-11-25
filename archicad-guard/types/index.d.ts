@@ -1,8 +1,12 @@
-// archicad-guard keeps no $.state values yet. Its contract grows with its points (1.3, 1.4).
-export type Placeholder = never
+// archicad-guard's $.state contract (point 1.4).
+
+/** The backups made this session: project key (path, `/`, lower case) → the backup file's full path. */
+export type Backups = Record<string, string>
 
 declare module 'claude-code' {
   interface PluginState {
-    'archicad-guard': {}
+    'archicad-guard': {
+      backups: Backups
+    }
   }
 }
