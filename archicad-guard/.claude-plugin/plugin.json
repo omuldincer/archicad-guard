@@ -1,6 +1,6 @@
 {
   "name": "archicad-guard",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Asks before Claude changes the Archicad model, backs it up and logs every change.",
   "author": { "name": "Sebastian" },
   "types": "./types/index.d.ts"
