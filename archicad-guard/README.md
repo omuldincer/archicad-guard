@@ -31,7 +31,7 @@ They go in a folder beside the `.pln`, so they sync with the project:
   CHANGELOG.md      the same, as plain lines
 ```
 
-Backups are never deleted by the mod. Each log line has the time, the command, the element guids, the result (done, failed, partly failed, still running), the backup file, and "by Claude, approved by Sebastian".
+Backups are never deleted by the mod. Each log line has the time, the command, the element guids (those in the call, plus new ones Archicad names in its answer, so a created wall is logged by its guid), the result (done, failed, partly failed, still running), the backup file, and "by Claude, approved by Sebastian".
 
 A project that can't be backed up is never changed: untitled, Teamwork, a project whose path Archicad doesn't give, or an Archicad that doesn't answer. The change is stopped without a question and the reason is given.
 
@@ -65,5 +65,9 @@ Then `/reload-plugins`. After a version bump: `claude plugin update archicad-gua
 - The output of `/archicad-log` and `/archicad-restore` goes to Claude as well as to you.
 - A session started by another Claude session (a side session) may not run the mod. Seen 2026-11-25: a change went through there without asking. Make Archicad changes in a normal Code tab session.
 - Only the Tapir MCP tools are guarded. Anything that changes the `.pln` some other way (a script, another add-on, you in Archicad) isn't seen.
+
+## Tested live
+
+Version 0.1.0, 2026-11-25, Archicad 30 with Tapir 2.0.1, on a scratch copy of a template: a read passes, a move asks, Stop blocks it, Go ahead saves the project, copies the open `.pln` (44 MB, under a second) and then moves, the log shows the backup and the change, a second change in the session says the backup is already made, a delete shows its dry-run result.
 
 Checked with `claude plugin validate`, `claude plugin test` and `scripts/typecheck.sh` (`scripts/check.sh` runs all three).

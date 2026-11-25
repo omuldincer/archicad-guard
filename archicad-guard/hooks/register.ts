@@ -10,7 +10,7 @@ import type { Backups } from '../types'
 import { takesDryRun } from './lib/command-kind'
 import { elementGuidsOf, gateOf, jsonOfResult, OPTIONS, GO, HEADER, previewText, projectInfoOf, questionOf, stoppedText, stopReason, TAPIR_CALL, TAPIR_SERVER, type Facts, type Preview, type ProjectInfo, type TapirCall } from './lib/guard'
 import { argsOf, entriesOf, foundOfPath, LOG_COMMAND, LOG_DEFAULT, LOG_MAX, logText, nothingFoundText, portsOf, projectPathOfSession, RESTORE_COMMAND, restoreText, sortBackups, TAIL_BYTES, timeOfName, type BackupFile, type Found } from './lib/history'
-import { backupEntryOf, backupNameOf, changeEntryOf, copyArgv, jsonlLineOf, join, MD_HEADER, mdLineOf, outcomeOf, placeOf, projectKeyOf, savedOf, stemOf, type Entry, type Place } from './lib/record'
+import { answerJsonOf, backupEntryOf, backupNameOf, changeEntryOf, copyArgv, jsonlLineOf, join, MD_HEADER, mdLineOf, outcomeOf, placeOf, projectKeyOf, savedOf, stemOf, type Entry, type Place } from './lib/record'
 
 export { TAPIR_CALL_TOOL } from './lib/guard'
 
@@ -217,7 +217,7 @@ async function decide($: EngineInterface, input: Record<string, unknown>): Promi
 async function logChange($: EngineInterface, approved: Approved, result: Parameters<typeof outcomeOf>[0]): Promise<string | null> {
   try {
     const now = await $.clock.now()
-    const entry = changeEntryOf({ ms: now, tool: approved.tool, call: approved.call, projectPath: approved.place.projectPath, elements: elementGuidsOf(approved.call.params), outcome: outcomeOf(result), backup: approved.backup })
+    const entry = changeEntryOf({ ms: now, tool: approved.tool, call: approved.call, projectPath: approved.place.projectPath, elements: [...new Set([...elementGuidsOf(approved.call.params), ...elementGuidsOf(answerJsonOf(result))])], outcome: outcomeOf(result), backup: approved.backup })
 
     await writeLog($, approved.place, entry, now)
 

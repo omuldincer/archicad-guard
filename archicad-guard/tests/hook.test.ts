@@ -380,6 +380,26 @@ test('later changes in the same session: no second backup, the question names th
   expect(lines(seen).map(l => l['kind'])).toEqual(['backup', 'change', 'change'])
 })
 
+test('a new element is logged by the guid in the answer from Archicad (found live in 1.6b)', async ($, on) => {
+  const made = JSON.stringify({ elements: [{ elementId: { guid: GUID_B.toUpperCase() } }] })
+  const { seen } = world(on, { answer: 'Go ahead', toolResult: { result: { content: [{ type: 'text', text: made }] }, text: made } })
+
+  await start($)
+  await tapir($, 'elements_create_walls', { port: PORT, params: { wallsData: [{ begCoordinate: { x: 0, y: 0 }, endCoordinate: { x: 3, y: 0 } }] } })
+
+  expect(lines(seen).find(l => l['kind'] === 'change')?.['elements']).toEqual([GUID_B])
+  expect(seen.disk.get(MD)).toContain(`elements_create_walls · 1 element (${GUID_B}) · done`)
+})
+
+test('a failed change logs only the guids it named', async ($, on) => {
+  const { seen } = world(on, { answer: 'Go ahead', toolResult: { isError: true, result: GUID_B, text: JSON.stringify({ elementId: { guid: GUID_B } }) } })
+
+  await start($)
+  await move($)
+
+  expect(lines(seen).find(l => l['kind'] === 'change')?.['elements']).toEqual([GUID_A])
+})
+
 test('an existing log is added to, never replaced', async ($, on) => {
   const { seen } = world(on, { answer: 'Go ahead' })
 

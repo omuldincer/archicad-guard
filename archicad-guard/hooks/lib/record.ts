@@ -156,12 +156,27 @@ function failureOf(json: unknown): string | null {
 
 export type Outcome = { status: 'done' | 'partly failed' | 'failed' | 'still running'; detail: string | null }
 
+type ToolResultLike = { deny?: string; isError?: true; text?: string; result?: unknown } | null
+
+const textOfResult = (result: NonNullable<ToolResultLike>): string | undefined =>
+  result.text ?? (isRecord(result.result) ? textOfMcp(result.result as McpLike) : typeof result.result === 'string' ? result.result : undefined)
+
+/**
+ * Archicad's answer to a change that ran, as JSON, or null (denied, an error, not JSON). The log takes the guids of new
+ * elements from it (found live in 1.6b: `elements_create_walls` names its wall only in the answer).
+ */
+export function answerJsonOf(result: ToolResultLike): unknown {
+  if (result === null || typeof result.deny === 'string' || result.isError === true) return null
+
+  return jsonOfText(textOfResult(result)) ?? null
+}
+
 /** How the change went, from what the tool call resolved to. */
-export function outcomeOf(result: { deny?: string; isError?: true; text?: string; result?: unknown } | null): Outcome {
+export function outcomeOf(result: ToolResultLike): Outcome {
   if (result === null) return { status: 'failed', detail: 'the call never answered' }
   if (typeof result.deny === 'string') return { status: 'failed', detail: short(`refused before it ran: ${result.deny}`) }
 
-  const text = result.text ?? (isRecord(result.result) ? textOfMcp(result.result as McpLike) : typeof result.result === 'string' ? result.result : undefined)
+  const text = textOfResult(result)
 
   if (result.isError === true) return { status: 'failed', detail: text === undefined ? null : short(text) }
 
